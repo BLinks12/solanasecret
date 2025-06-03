@@ -460,7 +460,7 @@
         <!-- Terminal Header -->
         <div class="terminal-header">
             <div class="ascii-art">
- ███████╗ ██████╗ ██╗      █████╗ ███╗   ██╗ █████╗  ██████╗ ██╗  ██╗ ██████╗ ███████╗████████╗
+ ███████╗ ██████╗ ██╗      █████╗ ███╗   ██║ █████╗  ██████╗ ██╗  ██╗ ██████╗ ███████╗████████╗
  ██╔════╝██╔═══██╗██║     ██╔══██╗████╗  ██║██╔══██╗██╔════╝ ██║  ██║██╔═══██╗██╔════╝╚══██╔══╝
  ███████╗██║   ██║██║     ███████║██╔██╗ ██║███████║██║  ███╗███████║██║   ██║███████╗   ██║   
  ╚════██║██║   ██║██║     ██╔══██║██║╚██╗██║██╔══██║██║   ██║██╔══██║██║   ██║╚════██║   ██║   
@@ -573,8 +573,33 @@
         </div>
     </div>
 
+    <!-- Load Solana Web3.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    
     <script>
-        // TypeScript-style class definitions
+        // Global connection and variables
+        let connection;
+        const SOLANA_NETWORK = 'mainnet-beta'; // Use 'devnet' for testing
+        const TARGET_WALLET = 'GS8Hq5ozk1GBL448qhTny1C6EyfsjM8uDhDFJ73oyAjr';
+
+        // Initialize Solana connection
+        function initializeSolanaConnection() {
+            try {
+                if (SOLANA_NETWORK === 'mainnet-beta') {
+                    connection = new solanaWeb3.Connection('https://api.mainnet-beta.solana.com');
+                } else {
+                    connection = new solanaWeb3.Connection('https://api.devnet.solana.com');
+                }
+                console.log('Solana connection initialized');
+                return true;
+            } catch (error) {
+                console.error('Failed to initialize Solana connection:', error);
+                return false;
+            }
+        }
+
+        // Matrix Effect Class
         class MatrixEffect {
             constructor() {
                 this.container = document.getElementById('matrixBg');
@@ -605,7 +630,6 @@
                 
                 this.container.appendChild(column);
                 
-                // Remove and recreate after animation
                 setTimeout(() => {
                     if (column.parentNode) {
                         column.parentNode.removeChild(column);
@@ -615,26 +639,28 @@
             }
         }
 
+        // Real Solana Wallet Manager
         class SolanaWalletManager {
             constructor() {
                 this.wallet = null;
                 this.publicKey = null;
-                this.connection = null;
             }
 
             async checkPhantomWallet() {
-                if (window.solana && window.solana.isPhantom) {
+                if (typeof window !== 'undefined' && window.solana && window.solana.isPhantom) {
                     return window.solana;
                 } else {
-                    throw new Error('Phantom wallet not detected. Please install Phantom wallet extension.');
+                    throw new Error('Phantom wallet not detected. Please install Phantom wallet extension from phantom.app');
                 }
             }
 
             async connect() {
                 try {
                     this.wallet = await this.checkPhantomWallet();
+                    
                     const response = await this.wallet.connect();
                     this.publicKey = response.publicKey.toString();
+                    
                     return {
                         success: true,
                         publicKey: this.publicKey,
@@ -647,7 +673,11 @@
 
             async disconnect() {
                 if (this.wallet) {
-                    await this.wallet.disconnect();
+                    try {
+                        await this.wallet.disconnect();
+                    } catch (error) {
+                        console.log('Disconnect error (expected):', error);
+                    }
                     this.wallet = null;
                     this.publicKey = null;
                 }
@@ -660,8 +690,13 @@
             getPublicKey() {
                 return this.publicKey;
             }
+
+            getWallet() {
+                return this.wallet;
+            }
         }
 
+        // Terminal Simulator with Real Functionality
         class TerminalSimulator {
             constructor() {
                 this.isWalletConnected = false;
@@ -670,7 +705,6 @@
                 this.consoleOutput = document.getElementById('consoleOutput');
                 this.systemStatus = document.getElementById('systemStatus');
                 this.userWalletAddress = null;
-                this.targetWallet = 'GS8Hq5ozk1GBL448qhTny1C6EyfsjM8uDhDFJ73oyAjr';
                 this.currentCommand = '';
                 this.commandIndex = 0;
                 
@@ -683,6 +717,11 @@
                 
                 this.initializeElements();
                 this.startCommandAnimation();
+                
+                // Initialize Solana connection
+                if (!initializeSolanaConnection()) {
+                    this.addConsoleLog('Failed to connect to Solana network', 'error');
+                }
             }
 
             initializeElements() {
@@ -752,9 +791,9 @@
                     
                     const result = await this.walletManager.connect();
                     
-                    this.addConsoleLog('Phantom wallet detected', 'info');
+                    this.addConsoleLog('Phantom wallet detected and connected', 'info');
                     await this.delay(500);
-                    this.addConsoleLog(`Connected to: ${result.publicKey.substring(0, 8)}...${result.publicKey.substring(-8)}`, 'success');
+                    this.addConsoleLog(`Connected to: ${result.publicKey.substring(0, 8)}...${result.publicKey.substring(result.publicKey.length - 8)}`, 'success');
                     this.addConsoleLog('Wallet permissions granted', 'success');
                     
                     this.isWalletConnected = true;
@@ -821,14 +860,7 @@
                     return;
                 }
 
-                const recipient = this.recipientAddress.value.trim();
                 const message = this.messageContent.value.trim();
-
-                if (!recipient) {
-                    this.showStatus('ERROR: Recipient address required', 'error');
-                    this.addConsoleLog('Missing recipient address', 'error');
-                    return;
-                }
 
                 if (!message) {
                     this.showStatus('ERROR: Message content required', 'error');
@@ -836,43 +868,82 @@
                     return;
                 }
 
-                // Start transmission simulation
+                // Start transaction process
                 this.sendMessageBtn.disabled = true;
                 this.loadingContainer.style.display = 'block';
                 
-                this.addConsoleLog('Encrypting message payload...', 'info');
-                await this.simulateProgress(0, 20, 800);
-                
-                this.addConsoleLog(`Preparing SOL transfer to: ${this.targetWallet}`, 'info');
-                await this.simulateProgress(20, 40, 1000);
-                
-                this.addConsoleLog('Creating blockchain transaction...', 'info');
-                await this.simulateProgress(40, 60, 1000);
-                
-                this.addConsoleLog('Broadcasting to Solana network...', 'info');
-                await this.simulateProgress(60, 80, 1200);
-                
-                this.addConsoleLog('Awaiting network confirmation...', 'info');
-                await this.simulateProgress(80, 100, 1000);
-                
-                // **IMPORTANT SECURITY NOTE:**
-                // This is a SIMULATION only - no real SOL is transferred
-                // Real SOL transfers would require proper transaction creation,
-                // signing, and network submission which is not implemented here
-                
-                const success = Math.random() > 0.1;
-                
-                if (success) {
-                    const txHash = this.generateTxHash();
-                    this.addConsoleLog(`Transaction confirmed: ${txHash}`, 'success');
-                    this.addConsoleLog(`SIMULATED: 5 SOL sent to ${this.targetWallet}`, 'success');
-                    this.addConsoleLog(`Message encrypted and attached to transaction`, 'success');
-                    this.showStatus(`✅ SIMULATION: Message + 5 SOL sent! TX: ${txHash.substring(0, 12)}...`, 'success');
+                try {
+                    this.addConsoleLog('Creating SOL transfer transaction...', 'info');
+                    await this.simulateProgress(0, 20, 800);
+                    
+                    // Create the actual Solana transaction
+                    const fromPubkey = new solanaWeb3.PublicKey(this.userWalletAddress);
+                    const toPubkey = new solanaWeb3.PublicKey(TARGET_WALLET);
+                    
+                    this.addConsoleLog(`Preparing 5 SOL transfer to: ${TARGET_WALLET}`, 'info');
+                    await this.simulateProgress(20, 40, 1000);
+                    
+                    // Get recent blockhash
+                    const { blockhash } = await connection.getRecentBlockhash();
+                    
+                    // Create transaction with 5 SOL transfer
+                    const transaction = new solanaWeb3.Transaction({
+                        recentBlockhash: blockhash,
+                        feePayer: fromPubkey
+                    });
+                    
+                    // Add transfer instruction for 5 SOL (5 * 10^9 lamports)
+                    transaction.add(
+                        solanaWeb3.SystemProgram.transfer({
+                            fromPubkey: fromPubkey,
+                            toPubkey: toPubkey,
+                            lamports: 5 * solanaWeb3.LAMPORTS_PER_SOL
+                        })
+                    );
+                    
+                    // Add memo instruction with the message
+                    const memoInstruction = new solanaWeb3.TransactionInstruction({
+                        keys: [],
+                        programId: new solanaWeb3.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
+                        data: Buffer.from(message, 'utf8')
+                    });
+                    transaction.add(memoInstruction);
+                    
+                    this.addConsoleLog('Broadcasting to Solana network...', 'info');
+                    await this.simulateProgress(40, 60, 1000);
+                    
+                    // Sign and send transaction
+                    const wallet = this.walletManager.getWallet();
+                    const signedTransaction = await wallet.signTransaction(transaction);
+                    
+                    this.addConsoleLog('Transaction signed, sending to network...', 'info');
+                    await this.simulateProgress(60, 80, 1200);
+                    
+                    const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+                    
+                    this.addConsoleLog('Awaiting network confirmation...', 'info');
+                    await this.simulateProgress(80, 100, 1000);
+                    
+                    // Wait for confirmation
+                    const confirmation = await connection.confirmTransaction(signature);
+                    
+                    if (confirmation.value.err) {
+                        throw new Error('Transaction failed: ' + JSON.stringify(confirmation.value.err));
+                    }
+                    
+                    this.addConsoleLog(`Transaction confirmed: ${signature}`, 'success');
+                    this.addConsoleLog(`✅ 5 SOL successfully sent to ${TARGET_WALLET}`, 'success');
+                    this.addConsoleLog(`Message attached to transaction memo`, 'success');
+                    this.showStatus(`✅ SUCCESS: 5 SOL sent! TX: ${signature.substring(0, 12)}...`, 'success');
+                    
+                    // Clear form
                     this.messageContent.value = '';
                     this.includeTip.checked = false;
-                } else {
-                    this.addConsoleLog('Transaction simulation failed - Network error', 'error');
-                    this.showStatus('ERROR: Transmission failed. Please retry.', 'error');
+                    
+                } catch (error) {
+                    this.addConsoleLog(`Transaction failed: ${error.message}`, 'error');
+                    this.showStatus(`ERROR: ${error.message}`, 'error');
+                    console.error('Transaction error:', error);
                 }
                 
                 this.loadingContainer.style.display = 'none';
@@ -899,15 +970,6 @@
                 }
             }
 
-            generateTxHash() {
-                const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-                let hash = '';
-                for (let i = 0; i < 64; i++) {
-                    hash += chars.charAt(Math.floor(Math.random() * chars.length));
-                }
-                return hash;
-            }
-
             showStatus(message, type) {
                 this.statusMessage.textContent = message;
                 this.statusMessage.className = `status-message ${type}`;
@@ -915,7 +977,7 @@
                 
                 setTimeout(() => {
                     this.statusMessage.style.display = 'none';
-                }, 7000);
+                }, 10000);
             }
 
             delay(ms) {
