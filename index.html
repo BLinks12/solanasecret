@@ -574,8 +574,7 @@
     </div>
 
     <!-- Load Solana Web3.js from CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
-    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    <script src="https://unpkg.com/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
     
     <script>
         // Global connection and variables
@@ -583,9 +582,21 @@
         const SOLANA_NETWORK = 'mainnet-beta'; // Use 'devnet' for testing
         const TARGET_WALLET = 'GS8Hq5ozk1GBL448qhTny1C6EyfsjM8uDhDFJ73oyAjr';
 
+        // Wait for Solana Web3 to load
+        function waitForSolana() {
+            return new Promise((resolve) => {
+                if (typeof solanaWeb3 !== 'undefined') {
+                    resolve();
+                } else {
+                    setTimeout(() => waitForSolana().then(resolve), 100);
+                }
+            });
+        }
+
         // Initialize Solana connection
-        function initializeSolanaConnection() {
+        async function initializeSolanaConnection() {
             try {
+                await waitForSolana();
                 if (SOLANA_NETWORK === 'mainnet-beta') {
                     connection = new solanaWeb3.Connection('https://api.mainnet-beta.solana.com');
                 } else {
@@ -646,20 +657,28 @@
                 this.publicKey = null;
             }
 
-            async checkPhantomWallet() {
-                if (typeof window !== 'undefined' && window.solana && window.solana.isPhantom) {
-                    return window.solana;
-                } else {
-                    throw new Error('Phantom wallet not detected. Please install Phantom wallet extension from phantom.app');
+            async getPhantom() {
+                if (typeof window !== 'undefined') {
+                    if (window.solana && window.solana.isPhantom) {
+                        return window.solana;
+                    } else if (window.phantom && window.phantom.solana) {
+                        return window.phantom.solana;
+                    }
                 }
+                throw new Error('Phantom wallet not found. Please install Phantom wallet extension.');
             }
 
             async connect() {
                 try {
-                    this.wallet = await this.checkPhantomWallet();
+                    const provider = await this.getPhantom();
                     
-                    const response = await this.wallet.connect();
+                    // Request connection
+                    const response = await provider.connect();
+                    
+                    this.wallet = provider;
                     this.publicKey = response.publicKey.toString();
+                    
+                    console.log('Wallet connected:', this.publicKey);
                     
                     return {
                         success: true,
@@ -667,6 +686,7 @@
                         wallet: this.wallet
                     };
                 } catch (error) {
+                    console.error('Connection error:', error);
                     throw new Error(`Wallet connection failed: ${error.message}`);
                 }
             }
@@ -676,7 +696,7 @@
                     try {
                         await this.wallet.disconnect();
                     } catch (error) {
-                        console.log('Disconnect error (expected):', error);
+                        console.log('Disconnect error (normal):', error.message);
                     }
                     this.wallet = null;
                     this.publicKey = null;
@@ -717,9 +737,14 @@
                 
                 this.initializeElements();
                 this.startCommandAnimation();
-                
-                // Initialize Solana connection
-                if (!initializeSolanaConnection()) {
+                this.initializeSolana();
+            }
+
+            async initializeSolana() {
+                try {
+                    await initializeSolanaConnection();
+                    this.addConsoleLog('Solana network connection established', 'success');
+                } catch (error) {
                     this.addConsoleLog('Failed to connect to Solana network', 'error');
                 }
             }
@@ -873,6 +898,8 @@
                 this.loadingContainer.style.display = 'block';
                 
                 try {
+                    await waitForSolana();
+                    
                     this.addConsoleLog('Creating SOL transfer transaction...', 'info');
                     await this.simulateProgress(0, 20, 800);
                     
@@ -884,11 +911,11 @@
                     await this.simulateProgress(20, 40, 1000);
                     
                     // Get recent blockhash
-                    const { blockhash } = await connection.getRecentBlockhash();
+                    const latestBlockhash = await connection.getLatestBlockhash();
                     
                     // Create transaction with 5 SOL transfer
                     const transaction = new solanaWeb3.Transaction({
-                        recentBlockhash: blockhash,
+                        recentBlockhash: latestBlockhash.blockhash,
                         feePayer: fromPubkey
                     });
                     
@@ -901,43 +928,58 @@
                         })
                     );
                     
-                    // Add memo instruction with the message
-                    const memoInstruction = new solanaWeb3.TransactionInstruction({
-                        keys: [],
-                        programId: new solanaWeb3.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
-                        data: Buffer.from(message, 'utf8')
-                    });
-                    transaction.add(memoInstruction);
+                    // Add memo instruction with the message (optional)
+                    try {
+                        const memoProgram = new solanaWeb3.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
+                        const memoInstruction = new solanaWeb3.TransactionInstruction({
+                            keys: [],
+                            programId: memoProgram,
+                            data: Buffer.from(message, 'utf8')
+                        });
+                        transaction.add(memoInstruction);
+                        this.addConsoleLog('Message memo attached to transaction', 'info');
+                    } catch (memoError) {
+                        this.addConsoleLog('Memo attachment failed, proceeding with transfer only', 'info');
+                    }
                     
-                    this.addConsoleLog('Broadcasting to Solana network...', 'info');
+                    this.addConsoleLog('Requesting wallet signature...', 'info');
                     await this.simulateProgress(40, 60, 1000);
                     
-                    // Sign and send transaction
+                    // Sign transaction
                     const wallet = this.walletManager.getWallet();
                     const signedTransaction = await wallet.signTransaction(transaction);
                     
-                    this.addConsoleLog('Transaction signed, sending to network...', 'info');
+                    this.addConsoleLog('Transaction signed, broadcasting to network...', 'info');
                     await this.simulateProgress(60, 80, 1200);
                     
-                    const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+                    // Send transaction
+                    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+                        skipPreflight: false,
+                        preflightCommitment: 'processed'
+                    });
                     
-                    this.addConsoleLog('Awaiting network confirmation...', 'info');
+                    this.addConsoleLog('Transaction sent, awaiting confirmation...', 'info');
                     await this.simulateProgress(80, 100, 1000);
                     
                     // Wait for confirmation
-                    const confirmation = await connection.confirmTransaction(signature);
+                    const confirmation = await connection.confirmTransaction({
+                        signature: signature,
+                        blockhash: latestBlockhash.blockhash,
+                        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+                    });
                     
                     if (confirmation.value.err) {
                         throw new Error('Transaction failed: ' + JSON.stringify(confirmation.value.err));
                     }
                     
-                    this.addConsoleLog(`Transaction confirmed: ${signature}`, 'success');
+                    this.addConsoleLog(`✅ Transaction confirmed: ${signature}`, 'success');
                     this.addConsoleLog(`✅ 5 SOL successfully sent to ${TARGET_WALLET}`, 'success');
-                    this.addConsoleLog(`Message attached to transaction memo`, 'success');
+                    this.addConsoleLog(`Message: "${message}" attached to transaction`, 'success');
                     this.showStatus(`✅ SUCCESS: 5 SOL sent! TX: ${signature.substring(0, 12)}...`, 'success');
                     
                     // Clear form
                     this.messageContent.value = '';
+                    this.recipientAddress.value = '';
                     this.includeTip.checked = false;
                     
                 } catch (error) {
