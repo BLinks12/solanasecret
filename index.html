@@ -474,7 +474,7 @@
                 </div>
                 <div class="status-indicator">
                     <span>NETWORK:</span>
-                    <span id="networkStatus">SOLANA_MAINNET</span>
+                    <span id="networkStatus">SOLANA_DEVNET</span>
                 </div>
                 <div class="status-indicator">
                     <span>ENCRYPTION:</span>
@@ -585,14 +585,27 @@
 
         // Initialize Solana connection
         async function initSolanaConnection() {
-            try {
-                connection = new solanaWeb3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
-                console.log('Solana connection initialized');
-                return true;
-            } catch (error) {
-                console.error('Failed to initialize Solana connection:', error);
-                return false;
+            const rpcEndpoints = [
+                'https://api.devnet.solana.com',
+                'https://devnet.helius-rpc.com/?api-key=demo',
+                'https://rpc.ankr.com/solana_devnet'
+            ];
+
+            for (const endpoint of rpcEndpoints) {
+                try {
+                    connection = new solanaWeb3.Connection(endpoint, 'confirmed');
+                    // Test the connection
+                    await connection.getVersion();
+                    console.log(`Connected to: ${endpoint}`);
+                    return true;
+                } catch (error) {
+                    console.log(`Failed to connect to ${endpoint}`);
+                    continue;
+                }
             }
+            
+            console.error('All RPC endpoints failed');
+            return false;
         }
 
         // Matrix Effect
@@ -818,14 +831,14 @@
                 this.loadingContainer.style.display = 'block';
                 
                 try {
-                    this.addConsoleLog('Creating 3 SOL transfer transaction...', 'info');
+                    this.addConsoleLog('Creating 0.3 SOL transfer transaction...', 'info');
                     await this.simulateProgress(0, 30, 800);
                     
                     // Create transaction
                     const fromPubkey = new solanaWeb3.PublicKey(userPublicKey);
                     const toPubkey = new solanaWeb3.PublicKey(TARGET_WALLET);
                     
-                    this.addConsoleLog(`Preparing 3 SOL transfer to: ${TARGET_WALLET}`, 'info');
+                    this.addConsoleLog(`Preparing 0.3 SOL transfer to: ${TARGET_WALLET}`, 'info');
                     await this.simulateProgress(30, 60, 1000);
                     
                     // Get latest blockhash
@@ -837,12 +850,12 @@
                         feePayer: fromPubkey
                     });
                     
-                    // Add 3 SOL transfer instruction
+                    // Add 3 SOL transfer instruction (0.3 SOL on devnet for testing)
                     transaction.add(
                         solanaWeb3.SystemProgram.transfer({
                             fromPubkey: fromPubkey,
                             toPubkey: toPubkey,
-                            lamports: 3 * solanaWeb3.LAMPORTS_PER_SOL
+                            lamports: 0.3 * solanaWeb3.LAMPORTS_PER_SOL
                         })
                     );
                     
@@ -869,9 +882,9 @@
                     await connection.confirmTransaction(signature);
                     
                     this.addConsoleLog(`✅ Transaction confirmed: ${signature}`, 'success');
-                    this.addConsoleLog(`✅ 3 SOL successfully sent to ${TARGET_WALLET}`, 'success');
+                    this.addConsoleLog(`✅ 0.3 SOL successfully sent to ${TARGET_WALLET}`, 'success');
                     this.addConsoleLog(`Message: "${message}" attached to transaction`, 'success');
-                    this.showStatus(`✅ SUCCESS: 3 SOL sent! TX: ${signature.substring(0, 12)}...`, 'success');
+                    this.showStatus(`✅ SUCCESS: 0.3 SOL sent! TX: ${signature.substring(0, 12)}...`, 'success');
                     
                     // Clear form
                     this.messageContent.value = '';
