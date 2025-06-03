@@ -682,21 +682,32 @@
             }
 
             async getPhantom() {
-                if (typeof window !== 'undefined') {
+                return new Promise((resolve, reject) => {
                     if (window.solana && window.solana.isPhantom) {
-                        return window.solana;
-                    } else if (window.phantom && window.phantom.solana) {
-                        return window.phantom.solana;
+                        resolve(window.solana);
+                    } else {
+                        // Wait a bit for Phantom to load
+                        let attempts = 0;
+                        const checkForPhantom = () => {
+                            attempts++;
+                            if (window.solana && window.solana.isPhantom) {
+                                resolve(window.solana);
+                            } else if (attempts < 10) {
+                                setTimeout(checkForPhantom, 100);
+                            } else {
+                                reject(new Error('Phantom wallet not found. Please install Phantom wallet extension.'));
+                            }
+                        };
+                        checkForPhantom();
                     }
-                }
-                throw new Error('Phantom wallet not found. Please install Phantom wallet extension.');
+                });
             }
 
             async connect() {
                 try {
                     const provider = await this.getPhantom();
                     
-                    // Request connection
+                    // Connect to Phantom
                     const response = await provider.connect();
                     
                     this.wallet = provider;
@@ -711,6 +722,12 @@
                     };
                 } catch (error) {
                     console.error('Connection error:', error);
+                    
+                    // If Phantom not found, provide helpful message
+                    if (error.message.includes('not found')) {
+                        throw new Error('Phantom wallet not detected. Please install Phantom from phantom.app');
+                    }
+                    
                     throw new Error(`Wallet connection failed: ${error.message}`);
                 }
             }
@@ -840,11 +857,18 @@
                 this.connectWalletBtn.textContent = 'Connecting...';
                 
                 try {
-                    this.addConsoleLog('Attempting Phantom wallet connection...', 'info');
+                    this.addConsoleLog('Checking for Phantom wallet...', 'info');
+                    
+                    // Check if Phantom is installed
+                    if (!window.solana || !window.solana.isPhantom) {
+                        throw new Error('Phantom wallet not detected. Please install Phantom wallet from phantom.app');
+                    }
+                    
+                    this.addConsoleLog('Phantom wallet detected, requesting connection...', 'info');
                     
                     const result = await this.walletManager.connect();
                     
-                    this.addConsoleLog('Phantom wallet detected and connected', 'info');
+                    this.addConsoleLog('Phantom wallet connected successfully', 'success');
                     await this.delay(500);
                     this.addConsoleLog(`Connected to: ${result.publicKey.substring(0, 8)}...${result.publicKey.substring(result.publicKey.length - 8)}`, 'success');
                     this.addConsoleLog('Wallet permissions granted', 'success');
@@ -872,6 +896,11 @@
                     this.showStatus(`ERROR: ${error.message}`, 'error');
                     this.connectWalletBtn.disabled = false;
                     this.connectWalletBtn.textContent = 'Connect Wallet';
+                    
+                    // If Phantom not installed, show helpful message
+                    if (error.message.includes('not detected')) {
+                        this.addConsoleLog('Please install Phantom wallet from https://phantom.app/', 'error');
+                    }
                 }
             }
 
